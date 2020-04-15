@@ -368,6 +368,12 @@ int main(int argc, char *argv[])
  * START HERE: DO NOT CHANGE THE CODE ABOVE THIS POINT
  *
  */
+
+		//TODO: Balance the number of cells in each processor
+		//TODO: Split culture and culture cells
+		//TODO: Make proccessor 0 the manager of food number generation and statistics collection (corner case: only one proccessor)
+		
+
 #if !defined(CP_TABLON)	  //Precompilaciñon para evitar medir tiempos en el momento de la prueba en el servidor http://frontendv.infor.uva.es/faq#6
 						  // 2.1 Time variables for single loop iterations
 	double timeInitCS;	  // 3.1 Initialize culture surface
@@ -457,15 +463,16 @@ int main(int argc, char *argv[])
 for (i = 0; i < rows; i++)
 			for (j = 0; j < columns; j++)
 				accessMat(culture, i, j) = 0.0;
-	if (rank == 0)
-	{
-		
+
 #if !defined(CP_TABLON)
 		timeInitCS = MPI_Wtime() - timeInitCS;
 #endif
 #if !defined(CP_TABLON)
 		timeInitCells = MPI_Wtime();
 #endif
+	if (rank == 0)
+	{
+		
 		for (i = 0; i < num_cells; i++)
 		{
 			cells[i].alive = true;
@@ -805,7 +812,7 @@ for (i = 0; i < rows; i++)
 		float *aux_for_interchange_culture = culture;
 		culture = culture_aux;
 		culture_aux = aux_for_interchange_culture;
-		
+
 		current_max_food = 0.0f;
 		for (i = 0; i < rows; i++)
 			for (j = 0; j < columns; j++)
@@ -821,6 +828,7 @@ for (i = 0; i < rows; i++)
 		timeDecreaseFoodT += timeDecreaseFoodL;
 #endif
 		int aux=0;
+
 
 		/* 4.9. Statistics */
 		// Statistics: Max food
