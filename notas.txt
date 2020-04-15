@@ -1,0 +1,72 @@
+herruzo99@herruzoPC:~/Documentos/uni/cpar/CParPractica2$ mpiexec -n 1 ./evolution 1000 1000 1000 100000 0.05 10 444324 5776534 9542462 200  500 500 40 40 20 10
+---------TIMES---------
+
+Init culture:
+	0.001606	
+	0.005383%	
+	Total: 		0.001606 
+	Porcentaje:	0.005383%
+
+Init cells:
+	0.000023	
+	0.000078%	
+	Total: 		0.000023 
+	Porcentaje:	0.000078%
+
+Main Loop:
+	29.827644	
+	99.994496%	
+	Total: 		29.827644 
+	Porcentaje:	99.994496%
+
+Normal food spreading:
+	4.479285	
+	15.016399%	
+	Total: 		4.479285 
+	Porcentaje:	15.016399%
+
+Special food spreading:
+	0.786188	
+	2.635623%	
+	Total: 		0.786188 
+	Porcentaje:	2.635623%
+
+Clean culture:
+	0.363689	
+	1.219234%	
+	Total: 		0.363689 
+	Porcentaje:	1.219234%
+
+Cell movement:
+	13.454539	
+	45.105132%	
+	Total: 		13.454539 
+	Porcentaje:	45.105132%
+
+Cell action:
+	4.011258	
+	13.447382%	
+	Total: 		4.011258 
+	Porcentaje:	13.447382%
+
+Reposition alive cells:
+	2.446038	
+	8.200122%	
+	Total: 		2.446038 
+	Porcentaje:	8.200122%
+
+Join cells:
+	0.093473	
+	0.313360%	
+	Total: 		0.093473 
+	Porcentaje:	0.313360%
+
+Decrease food:
+	1.551637	
+	5.201723%	
+	Total: 		1.551637 
+	Porcentaje:	5.201723%
+
+Time: 29.829286
+Result: 1000, 411522, 3349079, 2937557, 946017, 129069, 15488, 271, 2272.727783
+

@@ -7,11 +7,11 @@ mkdir -p output_original
 for i in {1..20}
 do
 echo "Fase $(($i))"
-../evolution 200 25 1000 1000 1 10 $((4424+$i*127)) 6534 2461 $(($i*19059 % 4000 +1)) 5 5 10 10 10 10 | sed --expression='$!d' >output_original/Seed1Test$i
-../evolution 30 30 1500 1000 1 7 4624 $((9334+$i*7)) 961 10 | sed --expression='$!d' >output_original/Seed2Test$i
-../evolution 40 10 200 1000 1 2 4468 57764 $((2461+$i*13)) $(($i*4741 % 40 +1)) | sed --expression='$!d' >output_original/Seed3Test$i
-../evolution 200 10 100 1000 2 4 $((44+$i*37)) 55534 $((9361+$i*56)) 100 1 1 50 1 3 1 | sed --expression='$!d' >output_original/Seed13Test$i
-../evolution 5 500 75 1000 1 11 $((4324+$i*8)) $((576+$i*3)) $((461+$i*11)) $(($i*742 % 80 +1)) | sed --expression='$!d' >output_original/Seed123Test$i
+../evolution 200 25 1000 1000 1 10 $((4424+$i*127)) 6534 2461 $(($i*19059 % 4000 +1)) 5 5 10 10 10 10 | sed --expression='$!d' >output_original/Iter$(($i))Part1Test
+../evolution 30 30 1500 1000 1 7 4624 $((9334+$i*7)) 961 10 | sed --expression='$!d' >output_original/Iter$(($i))Part2Test
+../evolution 40 10 200 1000 1 2 4468 57764 $((2461+$i*13)) $(($i*4741 % 40 +1)) | sed --expression='$!d' >output_original/Iter$(($i))Part3Test
+../evolution 200 10 100 1000 2 4 $((44+$i*37)) 55534 $((9361+$i*56)) 100 1 1 50 1 3 1 | sed --expression='$!d' >output_original/Iter$(($i))Part4Test
+../evolution 5 500 75 1000 1 11 $((4324+$i*8)) $((576+$i*3)) $((461+$i*11)) $(($i*742 % 80 +1)) | sed --expression='$!d' >output_original/Iter$(($i))Part5Test
 done
 echo "Fase 1x1"
 ../evolution 1 1 1000000 1000 5 10 444324 5776534 9542462 5 | sed --expression='$!d' >output_original/OneTileTest
