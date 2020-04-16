@@ -372,7 +372,7 @@ int main(int argc, char *argv[])
 		//TODO: Balance the number of cells in each processor
 		//TODO: Split culture and culture cells
 		//TODO: Make proccessor 0 the manager of food number generation and statistics collection (corner case: only one proccessor)
-		
+
 
 #if !defined(CP_TABLON)	  //Precompilaciñon para evitar medir tiempos en el momento de la prueba en el servidor http://frontendv.infor.uva.es/faq#6
 						  // 2.1 Time variables for single loop iterations
@@ -405,6 +405,12 @@ int main(int argc, char *argv[])
 	double timeJoinCellsListT = 0.0f;	 // JoinCellsList Loop
 	double timeDecreaseFoodT = 0.0f;	 // DecreaseFood Loop
 #endif
+
+	//Variable for general check of cell alive
+	bool any_cell_alive = false;; 
+	if(num_cells > 0){
+		any_cell_alive = true;
+	}
 	int nprocs;
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
@@ -546,9 +552,8 @@ for (i = 0; i < rows; i++)
 	int num_cells_alive = num_init_cells;
 	num_cells = num_init_cells;
 	int iter;
-	for (iter = 0; iter < max_iter && current_max_food <= max_food && num_cells_alive > 0; iter++)
+	for (iter = 0; iter < max_iter && current_max_food <= max_food && any_cell_alive; iter++)
 	{
-
 				int step_new_cells = 0;
 		int step_dead_cells = 0;
 
@@ -778,6 +783,7 @@ for (i = 0; i < rows; i++)
 				free_position++;
 			}
 		}
+
 #if !defined(CP_TABLON)
 		timeMovingAliveCellsL = MPI_Wtime() - timeMovingAliveCellsL;
 		timeMovingAliveCellsT += timeMovingAliveCellsL;
@@ -827,9 +833,21 @@ for (i = 0; i < rows; i++)
 		timeDecreaseFoodL = MPI_Wtime() - timeDecreaseFoodL;
 		timeDecreaseFoodT += timeDecreaseFoodL;
 #endif
+
+
 		int aux=0;
+		/*Check if any cell is still alive */
+		if(rank == 0){
+			MPI_Reduce(&num_cells_alive, &aux, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+			if (aux == 0){
+				any_cell_alive = false;
+			}
+			MPI_Bcast(&any_cell_alive, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
+		}else{
+			MPI_Reduce(&num_cells_alive, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+			MPI_Bcast(&any_cell_alive, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
 
-
+		}
 		/* 4.9. Statistics */
 		// Statistics: Max food
 		float aux_float;
@@ -837,21 +855,25 @@ for (i = 0; i < rows; i++)
 		if (aux_float > sim_stat.history_max_food)
 			sim_stat.history_max_food = aux_float;
 		// Statistics: Max new cells per step
-				MPI_Allreduce(&step_new_cells, &aux,1,MPI_INT, MPI_SUM,MPI_COMM_WORLD);
+		MPI_Reduce(&step_new_cells, &aux,1,MPI_INT, MPI_SUM, 0,MPI_COMM_WORLD);
 		if (aux > sim_stat.history_max_new_cells)
 			sim_stat.history_max_new_cells = aux;
 		// Statistics: Accumulated dead and Max dead cells per step
 		sim_stat.history_dead_cells += step_dead_cells;
-				MPI_Allreduce(&step_dead_cells, &aux,1,MPI_INT, MPI_SUM,MPI_COMM_WORLD);
+		MPI_Reduce(&step_dead_cells, &aux,1,MPI_INT, MPI_SUM, 0,MPI_COMM_WORLD);
 
 		if (aux > sim_stat.history_max_dead_cells)
 			sim_stat.history_max_dead_cells = aux;
 		// Statistics: Max alive cells per step
-				MPI_Allreduce(&num_cells_alive, &aux,1,MPI_INT, MPI_SUM,MPI_COMM_WORLD);
+		MPI_Reduce(&num_cells_alive, &aux,1,MPI_INT, MPI_SUM, 0,MPI_COMM_WORLD);
 
 		if (aux > sim_stat.history_max_alive_cells)
 			sim_stat.history_max_alive_cells = aux;
 	
+		//Check if any cell still alive
+		if(rank == 0){
+
+		}
 #ifdef DEBUG
 		/* 4.10. DEBUG: Print the current state of the simulation at the end of each iteration */
 		if(rank ==0){
