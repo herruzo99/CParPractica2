@@ -1,0 +1,27 @@
+Lista de los cambios que realizamos en la práctica anterior:
+
+- Inlining de las funciones: cell_new_direction, cell_mutation,
+- Obtención de los números aleatorios previamente y guardarlos en una matriz.
+  Tanto en el reparto normal como en el especial.
+- Reservar la memoria del array de comida especial dentro del if.
+- Poner culture y culture_cells a cero en el mismo bucle.
+- Existen fallos de comprobar estructuras que no son las que se acaban de crear
+  (EJemplo en la linea 406 del codigo original de MPI)
+- Lo que en OMP eran variables fuera del bucle para hacer las reducciones aquí
+se traducira posiblemente en variables para hacer reducciones que luego enviaremos
+ al proceso maestro.
+- El decremento de num_cell_alive de la linea 422 se traduce en... un decremento
+que agrupa todas las celulas que se han muerto en esta pasada
+- Hay algun ++ convertido en +=1
+- Cambia las acciones de todas las celulas por calcular si estan vivas y luego
+ realizar las acciones ( EL bucle 4.6 sube mas arriba)
+- Se extrae la celula para renombrarla como old antes de acceder a sus propiedades.
+- Cambio de la forma en la que se gestiona el bucle de la linea 475: Se reducen
+operaciones que podrían hacerse a la vez
+- EN vez de efectuar los cambios sobre la celula nueva y la vieja al dividirse,
+simplificamos los cambios haciendolos sobre una sola y luego clonando esa celula
+como la celula nueva
+- en vez de hacer un bucle para limpiar la comida se limpia esta en cada
+iteracion del bucle dde cell actions
+- Hay un cambio en la linea 676 del codigo anterior que no avabo de entender
+ para que la usabamos
