@@ -55,6 +55,9 @@ typedef struct
 	bool alive;					  // Flag indicating if the cell is still alive
 } Cell;
 
+/* prototype function to compare cells by position*/
+int compareCells(const void *_a, const void *_b);
+
 /* Structure for simulation statistics */
 typedef struct
 {
@@ -369,12 +372,11 @@ int main(int argc, char *argv[])
  *
  */
 
-		//TODO: Balance the number of cells in each processor
-		//TODO: Split culture and culture cells
-		//TODO: Make proccessor 0 the manager of food number generation and statistics collection (corner case: only one proccessor)
+	//TODO: Balance the number of cells in each processor
+	//TODO: Split culture and culture cells
+	//TODO: Make proccessor 0 the manager of food number generation and statistics collection (corner case: only one proccessor)
 
-
-#if !defined(CP_TABLON)	  //Precompilaciñon para evitar medir tiempos en el momento de la prueba en el servidor http://frontendv.infor.uva.es/faq#6
+#if !defined(CP_TABLON)	  //Precompilaciñon para evitar medir tiempos en el momento de la prueba en el servidor http://frontendv.infor.uva.es/faq#6 \
 						  // 2.1 Time variables for single loop iterations
 	double timeInitCS;	  // 3.1 Initialize culture surface
 	double timeInitCells; // 3.2 Initialize cells
@@ -387,7 +389,7 @@ int main(int argc, char *argv[])
 	double timeMovingAliveCellsL; // MovingAliveCells Loop
 	double timeJoinCellsListL;	  // JoinCellsList Loop
 	double timeDecreaseFoodL;	  // DecreaseFood Loop
-	double timeDataCollectionL;   // Sync statistics
+	double timeDataCollectionL;	  // Sync statistics
 
 	// 2.2 Time variables for total time invested in each loop
 
@@ -403,13 +405,15 @@ int main(int argc, char *argv[])
 	double timeMovingAliveCellsT = 0.0f; // MovingAliveCells Loop
 	double timeJoinCellsListT = 0.0f;	 // JoinCellsList Loop
 	double timeDecreaseFoodT = 0.0f;	 // DecreaseFood Loop
-	double timeDataCollectionT = 0.0f;   // Sync statistics
+	double timeDataCollectionT = 0.0f;	 // Sync statistics
 
 #endif
 
 	//Variable for general check of cell alive
-	bool any_cell_alive = false;; 
-	if(num_cells > 0){
+	bool any_cell_alive = false;
+	;
+	if (num_cells > 0)
+	{
 		any_cell_alive = true;
 	}
 	int nprocs;
@@ -440,48 +444,56 @@ int main(int argc, char *argv[])
 	MPI_Type_create_resized(MPI_CellNoDis, lb, extent, &MPI_Cell);
 	MPI_Type_commit(&MPI_Cell);
 
-	/* 3. Initialize culture surface and initial cells */
-	int num_init_cells = num_cells / nprocs;
-	int offset_cells = num_cells - (num_init_cells*nprocs);
-	if (rank < offset_cells)
-	{
-		num_init_cells++;
-	}
-	Cell *cells_subpart = (Cell *)malloc(sizeof(Cell) * (size_t)num_init_cells);
-	if (cells == NULL)
-	{
-		fprintf(stderr, "-- Error allocating: %d cells\n", num_cells);
-		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-	}
-	int num_culture_cells = (size_t)rows * (size_t)columns;
-	culture = (float *)malloc(sizeof(float) * num_culture_cells);
-	culture_cells = (short *)malloc(sizeof(short) * num_culture_cells);
-	short *culture_cells_aux = (short *)malloc(sizeof(short) * num_culture_cells);
-	float *culture_aux = (float *)malloc(sizeof(float) * num_culture_cells);
+	/*Culture cells distribution */
+#define cellPos(exp1, exp2) (int)(exp1) * columns + (int)(exp2)
+	int num_culture_cells = rows * columns;
 
-	if (culture == NULL || culture_cells == NULL || culture_cells_aux == NULL)
+	int self_culture_cells = num_culture_cells / nprocs;
+	int offset_culture_cells = num_culture_cells - (self_culture_cells * nprocs);
+
+	int min_proc_culture_cells = rank * self_culture_cells + (rank < offset_culture_cells ? rank : offset_culture_cells);
+	int max_proc_culture_cells = min_proc_culture_cells + self_culture_cells + (rank < offset_culture_cells ? 1 : 0);
+
+	if (rank < offset_culture_cells)
+		self_culture_cells++;
+
+	culture = (float *)malloc(sizeof(float) * (size_t)num_culture_cells);
+	culture_cells = (short *)malloc(sizeof(short) * (size_t)num_culture_cells);
+	short *culture_cells_aux = (short *)malloc(sizeof(short) * (size_t)num_culture_cells);
+	float *culture_aux = (float *)malloc(sizeof(float) * (size_t)num_culture_cells);
+	if (culture == NULL || culture_cells == NULL || culture_cells_aux == NULL || culture_aux == NULL)
 	{
 		fprintf(stderr, "-- Error allocating culture structures for size: %d x %d \n", rows, columns);
 		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 	}
+
 #if !defined(CP_TABLON)
 	timeInitCS = MPI_Wtime();
 #endif
-for (i = 0; i < rows; i++)
-			for (j = 0; j < columns; j++){
-				accessMat(culture, i, j) = 0.0;
-				accessMat(culture_cells, i, j) = 0.0f;
-			}
+	for (i = 0; i < self_culture_cells; i++)
+	{
+		culture[i] = 0.0;
+		culture_cells[i] = 0.0f;
+	}
+#if !defined(CP_TABLON)
+	timeInitCS = MPI_Wtime() - timeInitCS;
+#endif
 
 #if !defined(CP_TABLON)
-		timeInitCS = MPI_Wtime() - timeInitCS;
+	timeInitCells = MPI_Wtime();
 #endif
-#if !defined(CP_TABLON)
-		timeInitCells = MPI_Wtime();
-#endif
+	/* Cell distribution */
+	Cell *cells_subpart;
 	if (rank == 0)
 	{
-		
+		int num_init_cells_for_all[nprocs];
+		for (i = 0; i < nprocs; i++)
+		{
+			num_init_cells_for_all[i] = 0;
+		}
+		int max_procs_culture_cells[nprocs];
+		MPI_Gather(&max_proc_culture_cells, 1, MPI_INT, max_procs_culture_cells, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
 		for (i = 0; i < num_cells; i++)
 		{
 			cells[i].alive = true;
@@ -498,22 +510,58 @@ for (i = 0; i < rows; i++)
 			cells[i].choose_mov[0] = 0.33f;
 			cells[i].choose_mov[1] = 0.34f;
 			cells[i].choose_mov[2] = 0.33f;
+
+			j = 0;
+			while (j < nprocs)
+			{
+				if (cellPos(cells[i].pos_row, cells[i].pos_col) >= max_procs_culture_cells[j])
+				{
+					j++;
+				}
+				else
+				{
+
+					num_init_cells_for_all[j]++;
+					j = nprocs;
+				}
+
+			}
+		}
+		qsort(cells, num_cells, sizeof(Cell), &compareCells);
+	int tmp_num_cells = num_cells;
+		MPI_Scatter(&num_init_cells_for_all, 1, MPI_INT, &num_cells, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		cells_subpart = (Cell *)malloc(sizeof(Cell) * (size_t)num_cells);
+		if (cells_subpart == NULL)
+		{
+			fprintf(stderr, "-- Error allocating: %d cells\n", num_cells);
+			MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 		}
 
-		int sendcnts[nprocs];
+
+
 		int displs[nprocs];
-		sendcnts[0] = num_init_cells;
+		int *sendcnts = num_init_cells_for_all;
 		displs[0] = 0;
 		for (i = 1; i < nprocs; i++)
 		{
-			sendcnts[i] = i < offset_cells ? num_cells / nprocs + 1 : num_cells / nprocs;
 			displs[i] = displs[i - 1] + sendcnts[i - 1];
 		}
-		MPI_Scatterv(cells, sendcnts, displs, MPI_Cell, cells_subpart, sendcnts[0], MPI_Cell, 0, MPI_COMM_WORLD);
+
+		MPI_Scatterv(cells, sendcnts, displs, MPI_Cell, cells_subpart, num_cells, MPI_Cell, 0, MPI_COMM_WORLD);
 	}
 	else
 	{
-		MPI_Scatterv(0, 0, 0, MPI_Cell, cells_subpart, num_init_cells, MPI_Cell, 0, MPI_COMM_WORLD);
+		MPI_Gather(&max_proc_culture_cells, 1, MPI_INT, NULL, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Scatter(NULL, 1, MPI_INT, &num_cells, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+		cells_subpart = (Cell *)malloc(sizeof(Cell) * (size_t)num_cells);
+		if (cells_subpart == NULL)
+		{
+			fprintf(stderr, "-- Error allocating: %d cells\n", num_cells);
+			MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+		}
+
+		MPI_Scatterv(0, 0, 0, MPI_Cell, cells_subpart, num_cells, MPI_Cell, 0, MPI_COMM_WORLD);
 	}
 
 #if !defined(CP_TABLON)
@@ -521,12 +569,11 @@ for (i = 0; i < rows; i++)
 #endif
 	/* 7. Free resources */
 
-
 	free(cells);
 	cells = cells_subpart;
 	// Statistics: Initialize total number of cells, and max. alive
-	sim_stat.history_total_cells = num_init_cells;
-	sim_stat.history_max_alive_cells = num_init_cells;
+	sim_stat.history_total_cells = num_cells;
+	sim_stat.history_max_alive_cells = num_cells;
 
 #ifdef DEBUG
 	/* Show initial cells data */
@@ -552,13 +599,11 @@ for (i = 0; i < rows; i++)
 	timeML = MPI_Wtime();
 #endif
 	float current_max_food = 0.0f;
-	int num_cells_alive = num_init_cells;
-	num_cells = num_init_cells;
+	int num_cells_alive = num_cells;
 	int iter;
 	for (iter = 0; iter < max_iter && current_max_food <= max_food && any_cell_alive; iter++)
 	{
-
-				int step_new_cells = 0;
+		int step_new_cells = 0;
 		int step_dead_cells = 0;
 
 		/* 4.1. Spreading new food */
@@ -578,6 +623,7 @@ for (i = 0; i < rows; i++)
 		timeNormalSpreadingL = MPI_Wtime() - timeNormalSpreadingL;
 		timeNormalSpreadingT += timeNormalSpreadingL;
 #endif
+
 #if !defined(CP_TABLON)
 		timeSpecialSpreadingL = MPI_Wtime();
 #endif
@@ -598,8 +644,8 @@ for (i = 0; i < rows; i++)
 		timeSpecialSpreadingT += timeSpecialSpreadingL;
 #endif
 
-/* 4.2. Prepare ancillary data structures */
-/* 4.2.1. Clear ancillary structure of the culture to account alive cells in a position after movement */
+		/* 4.2. Prepare ancillary data structures */
+		/* 4.2.1. Clear ancillary structure of the culture to account alive cells in a position after movement */
 
 		/* 4.2.2. Allocate ancillary structure to store the food level to be shared by cells in the same culture place */
 		float *food_to_share = (float *)malloc(sizeof(float) * num_cells);
@@ -615,69 +661,69 @@ for (i = 0; i < rows; i++)
 #endif
 		for (i = 0; i < num_cells; i++)
 		{
-				cells[i].age++;
-				// Statistics: Max age of a cell in the simulation history
-				if (cells[i].age > sim_stat.history_max_age)
-					sim_stat.history_max_age = cells[i].age;
+			cells[i].age++;
+			// Statistics: Max age of a cell in the simulation history
+			if (cells[i].age > sim_stat.history_max_age)
+				sim_stat.history_max_age = cells[i].age;
 
-				/* 4.3.1. Check if the cell has the needed energy to move or keep alive */
-				if (cells[i].storage < 0.1f)
+			/* 4.3.1. Check if the cell has the needed energy to move or keep alive */
+			if (cells[i].storage < 0.1f)
+			{
+				// Cell has died
+				cells[i].alive = false;
+				num_cells_alive--;
+				step_dead_cells++;
+				continue;
+			}
+			if (cells[i].storage < 1.0f)
+			{
+				// Almost dying cell, it cannot move, only if enough food is dropped here it will survive
+				cells[i].storage -= 0.2f;
+			}
+			else
+			{
+				// Consume energy to move
+				cells[i].storage -= 1.0f;
+
+				/* 4.3.2. Choose movement direction */
+				float prob = (float)erand48(cells[i].random_seq);
+				if (prob < cells[i].choose_mov[0])
 				{
-					// Cell has died
-					cells[i].alive = false;
-					num_cells_alive--;
-					step_dead_cells++;
-					continue;
+					// Turn left (90 degrees)
+					float tmp = cells[i].mov_col;
+					cells[i].mov_col = cells[i].mov_row;
+					cells[i].mov_row = -tmp;
 				}
-				if (cells[i].storage < 1.0f)
+				else if (prob >= cells[i].choose_mov[0] + cells[i].choose_mov[1])
 				{
-					// Almost dying cell, it cannot move, only if enough food is dropped here it will survive
-					cells[i].storage -= 0.2f;
+					// Turn right (90 degrees)
+					float tmp = cells[i].mov_row;
+					cells[i].mov_row = cells[i].mov_col;
+					cells[i].mov_col = -tmp;
 				}
-				else
-				{
-					// Consume energy to move
-					cells[i].storage -= 1.0f;
+				// else do not change the direction
 
-					/* 4.3.2. Choose movement direction */
-					float prob = (float)erand48(cells[i].random_seq);
-					if (prob < cells[i].choose_mov[0])
-					{
-						// Turn left (90 degrees)
-						float tmp = cells[i].mov_col;
-						cells[i].mov_col = cells[i].mov_row;
-						cells[i].mov_row = -tmp;
-					}
-					else if (prob >= cells[i].choose_mov[0] + cells[i].choose_mov[1])
-					{
-						// Turn right (90 degrees)
-						float tmp = cells[i].mov_row;
-						cells[i].mov_row = cells[i].mov_col;
-						cells[i].mov_col = -tmp;
-					}
-					// else do not change the direction
+				/* 4.3.3. Update position moving in the choosen direction*/
+				cells[i].pos_row += cells[i].mov_row;
+				cells[i].pos_col += cells[i].mov_col;
+				// Periodic arena: Left/Rigth edges are connected, Top/Bottom edges are connected
+				if (cells[i].pos_row < 0)
+					cells[i].pos_row += rows;
+				if (cells[i].pos_row >= rows)
+					cells[i].pos_row -= rows;
+				if (cells[i].pos_col < 0)
+					cells[i].pos_col += columns;
+				if (cells[i].pos_col >= columns)
+					cells[i].pos_col -= columns;
+			}
 
-					/* 4.3.3. Update position moving in the choosen direction*/
-					cells[i].pos_row += cells[i].mov_row;
-					cells[i].pos_col += cells[i].mov_col;
-					// Periodic arena: Left/Rigth edges are connected, Top/Bottom edges are connected
-					if (cells[i].pos_row < 0)
-						cells[i].pos_row += rows;
-					if (cells[i].pos_row >= rows)
-						cells[i].pos_row -= rows;
-					if (cells[i].pos_col < 0)
-						cells[i].pos_col += columns;
-					if (cells[i].pos_col >= columns)
-						cells[i].pos_col -= columns;
-				}
-
-				/* 4.3.4. Annotate that there is one more cell in this culture position */
-				accessMat(culture_cells, cells[i].pos_row, cells[i].pos_col) += 1;
-				/* 4.3.5. Annotate the amount of food to be shared in this culture position */
-				food_to_share[i] = accessMat(culture, cells[i].pos_row, cells[i].pos_col);
+			/* 4.3.4. Annotate that there is one more cell in this culture position */
+			accessMat(culture_cells, cells[i].pos_row, cells[i].pos_col) += 1;
+			/* 4.3.5. Annotate the amount of food to be shared in this culture position */
+			food_to_share[i] = accessMat(culture, cells[i].pos_row, cells[i].pos_col);
 		} // End cell movements
 		/* Sync the culture_cells in all processes */
-		MPI_Allreduce(culture_cells,culture_cells_aux,num_culture_cells,MPI_SHORT,MPI_SUM,MPI_COMM_WORLD);
+		MPI_Allreduce(culture_cells, culture_cells_aux, num_culture_cells, MPI_SHORT, MPI_SUM, MPI_COMM_WORLD);
 		short *aux_for_interchange_culture_cells = culture_cells;
 		culture_cells = culture_cells_aux;
 		culture_cells_aux = aux_for_interchange_culture_cells;
@@ -686,6 +732,7 @@ for (i = 0; i < rows; i++)
 		timeCellMovementL = MPI_Wtime() - timeCellMovementL;
 		timeCellMovementT += timeCellMovementL;
 #endif
+
 /* 4.4. Cell actions */
 #if !defined(CP_TABLON)
 		timeCellActionsL = MPI_Wtime();
@@ -795,22 +842,26 @@ for (i = 0; i < rows; i++)
 #if !defined(CP_TABLON)
 		timeDecreaseFoodL = MPI_Wtime();
 #endif
+
+		current_max_food = 0.0f;
+		for (i = min_proc_culture_cells; i < max_proc_culture_cells; i++)
+		{
+			culture_cells[i] = 0.0f;
+
+			culture[i] *= 0.95f; // Reduce 5%
+			if (culture[i] > current_max_food)
+				current_max_food = culture[i];
+		}
 		/* Sync the culture in all processes */
-		MPI_Allreduce(culture,culture_aux,num_culture_cells,MPI_FLOAT,MPI_MIN,MPI_COMM_WORLD);
+		MPI_Allreduce(culture, culture_aux, num_culture_cells, MPI_FLOAT, MPI_MIN, MPI_COMM_WORLD);
 		float *aux_for_interchange_culture = culture;
 		culture = culture_aux;
 		culture_aux = aux_for_interchange_culture;
-
-		current_max_food = 0.0f;
-		for (i = 0; i < rows; i++)
-			for (j = 0; j < columns; j++)
-			{
-				accessMat(culture_cells, i, j) = 0.0f;
-
-				accessMat(culture, i, j) *= 0.95f; // Reduce 5%
-				if (accessMat(culture, i, j) > current_max_food)
-					current_max_food = accessMat(culture, i, j);
-			}
+		
+		MPI_Allreduce(culture_cells, culture_cells_aux, num_culture_cells, MPI_SHORT, MPI_MIN, MPI_COMM_WORLD);
+		aux_for_interchange_culture_cells = culture_cells;
+		culture_cells = culture_cells_aux;
+		culture_cells_aux = aux_for_interchange_culture_cells;
 
 
 #if !defined(CP_TABLON)
@@ -818,196 +869,218 @@ for (i = 0; i < rows; i++)
 		timeDecreaseFoodT += timeDecreaseFoodL;
 #endif
 
-
 #if !defined(CP_TABLON)
 		timeDataCollectionL = MPI_Wtime();
 #endif
 
-
-
-		int aux=0;
+		int aux = 0;
 		/*Check if any cell is still alive */
-		if(rank == 0){
+		if (rank == 0)
+		{
 			MPI_Reduce(&num_cells_alive, &aux, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-			if (aux == 0){
+			if (aux == 0)
+			{
 				any_cell_alive = false;
 			}
 			MPI_Bcast(&any_cell_alive, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
-		}else{
+		}
+		else
+		{
 			MPI_Reduce(&num_cells_alive, NULL, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 			MPI_Bcast(&any_cell_alive, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
-
 		}
 		/* 4.9. Statistics */
 		// Statistics: Max food
 		float aux_float;
-		MPI_Reduce(&current_max_food,&aux_float,1,MPI_FLOAT,MPI_MAX,0,MPI_COMM_WORLD);
+		MPI_Reduce(&current_max_food, &aux_float, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
 		if (aux_float > sim_stat.history_max_food)
 			sim_stat.history_max_food = aux_float;
 		// Statistics: Max new cells per step
-		MPI_Reduce(&step_new_cells, &aux,1,MPI_INT, MPI_SUM, 0,MPI_COMM_WORLD);
+		MPI_Reduce(&step_new_cells, &aux, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 		if (aux > sim_stat.history_max_new_cells)
 			sim_stat.history_max_new_cells = aux;
 		// Statistics: Accumulated dead and Max dead cells per step
 		sim_stat.history_dead_cells += step_dead_cells;
-		MPI_Reduce(&step_dead_cells, &aux,1,MPI_INT, MPI_SUM, 0,MPI_COMM_WORLD);
+		MPI_Reduce(&step_dead_cells, &aux, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
 		if (aux > sim_stat.history_max_dead_cells)
 			sim_stat.history_max_dead_cells = aux;
 		// Statistics: Max alive cells per step
-		MPI_Reduce(&num_cells_alive, &aux,1,MPI_INT, MPI_SUM, 0,MPI_COMM_WORLD);
+		MPI_Reduce(&num_cells_alive, &aux, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
 		if (aux > sim_stat.history_max_alive_cells)
 			sim_stat.history_max_alive_cells = aux;
-	
-	#if !defined(CP_TABLON)
+
+#if !defined(CP_TABLON)
 		timeDataCollectionL = MPI_Wtime() - timeDataCollectionL;
 		timeDataCollectionT += timeDataCollectionL;
 #endif
 #ifdef DEBUG
 		/* 4.10. DEBUG: Print the current state of the simulation at the end of each iteration */
-		if(rank ==0){
-		print_status(iter, rows, columns, culture, num_cells, cells, num_cells_alive, sim_stat);
+		if (rank == 0)
+		{
+			print_status(iter, rows, columns, culture, num_cells, cells, num_cells_alive, sim_stat);
 #endif // DEBUG
-	}
+		}
 #if !defined(CP_TABLON)
-	timeML = MPI_Wtime() - timeML;
+		timeML = MPI_Wtime() - timeML;
 #endif
 
-int aux=0;
-MPI_Reduce(&sim_stat.history_dead_cells,&aux,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
-sim_stat.history_dead_cells = aux;
-MPI_Reduce(&sim_stat.history_max_age,&aux,1,MPI_INT,MPI_MAX,0,MPI_COMM_WORLD);
-sim_stat.history_max_age = aux;
-MPI_Reduce(&sim_stat.history_total_cells,&aux,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
-sim_stat.history_total_cells = aux;
+		int aux = 0;
+		MPI_Reduce(&sim_stat.history_dead_cells, &aux, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+		sim_stat.history_dead_cells = aux;
+		MPI_Reduce(&sim_stat.history_max_age, &aux, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+		sim_stat.history_max_age = aux;
+		MPI_Reduce(&sim_stat.history_total_cells, &aux, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+		sim_stat.history_total_cells = aux;
 
-MPI_Reduce(&num_cells_alive,&aux,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
-num_cells_alive = aux;
-	/*
+		MPI_Reduce(&num_cells_alive, &aux, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+		num_cells_alive = aux;
+		/*
  *
  * STOP HERE: DO NOT CHANGE THE CODE BELOW THIS POINT
  *
  */
 
-	/* 5. Stop global time */
-	MPI_Barrier(MPI_COMM_WORLD);
-	ttotal = cp_Wtime() - ttotal;
+		/* 5. Stop global time */
+		MPI_Barrier(MPI_COMM_WORLD);
+		ttotal = cp_Wtime() - ttotal;
 
 #ifdef DEBUG
-	printf("List of cells at the end of the simulation: %d\n\n", num_cells);
-	for (i = 0; i < num_cells; i++)
-	{
-		printf("Cell %d, Alive: %d, Pos(%f,%f), Mov(%f,%f), Choose_mov(%f,%f,%f), Storage: %f, Age: %d\n",
-			   i,
-			   cells[i].alive,
-			   cells[i].pos_row,
-			   cells[i].pos_col,
-			   cells[i].mov_row,
-			   cells[i].mov_col,
-			   cells[i].choose_mov[0],
-			   cells[i].choose_mov[1],
-			   cells[i].choose_mov[2],
-			   cells[i].storage,
-			   cells[i].age);
-	}
+		printf("List of cells at the end of the simulation: %d\n\n", num_cells);
+		for (i = 0; i < num_cells; i++)
+		{
+			printf("Cell %d, Alive: %d, Pos(%f,%f), Mov(%f,%f), Choose_mov(%f,%f,%f), Storage: %f, Age: %d\n",
+				   i,
+				   cells[i].alive,
+				   cells[i].pos_row,
+				   cells[i].pos_col,
+				   cells[i].mov_row,
+				   cells[i].mov_col,
+				   cells[i].choose_mov[0],
+				   cells[i].choose_mov[1],
+				   cells[i].choose_mov[2],
+				   cells[i].storage,
+				   cells[i].age);
+		}
 #endif // DEBUG
 #if !defined(CP_TABLON)
-	if (rank == 0)
-	{
-		// 6.1.1 Disgragated time used on each loop
-		double timeGatherer[nprocs];
-		double totalGatheredTime;
-		int i;
-		printf("---------TIMES---------\n");
+		if (rank == 0)
+		{
+			// 6.1.1 Disgragated time used on each loop
+			double timeGatherer[nprocs];
+			double totalGatheredTime;
+			int i;
+			printf("---------TIMES---------\n");
 
-		MPI_Gather(&timeInitCS, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Init culture:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeInitCS, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Init culture:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeInitCells, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Init cells:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeInitCells, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Init cells:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeML, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Main Loop:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeML, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Main Loop:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeNormalSpreadingT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Normal food spreading:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeNormalSpreadingT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Normal food spreading:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeSpecialSpreadingT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Special food spreading:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeSpecialSpreadingT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Special food spreading:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeCellMovementT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Cell movement:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeCellMovementT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Cell movement:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeCellActionsT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Cell action:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeCellActionsT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Cell action:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeMovingAliveCellsT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Reposition alive cells:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeMovingAliveCellsT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Reposition alive cells:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeJoinCellsListT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Join cells:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeJoinCellsListT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Join cells:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeDecreaseFoodT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Decrease food:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
+			MPI_Gather(&timeDecreaseFoodT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Decrease food:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
 
-		MPI_Gather(&timeDataCollectionT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		printf("\n" ANSI_COLOR_RED "Statistics Sync:\n\t" ANSI_COLOR_RESET);
-		printTimes(timeGatherer, nprocs, ttotal);
-	}
-	else
-	{
-		MPI_Gather(&timeInitCS, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeInitCells, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeML, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeNormalSpreadingT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeSpecialSpreadingT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeCellMovementT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeCellActionsT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeMovingAliveCellsT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeJoinCellsListT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeDecreaseFoodT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		MPI_Gather(&timeDataCollectionT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-	}
+			MPI_Gather(&timeDataCollectionT, 1, MPI_DOUBLE, timeGatherer, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			printf("\n" ANSI_COLOR_RED "Statistics Sync:\n\t" ANSI_COLOR_RESET);
+			printTimes(timeGatherer, nprocs, ttotal);
+		}
+		else
+		{
+			MPI_Gather(&timeInitCS, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeInitCells, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeML, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeNormalSpreadingT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeSpecialSpreadingT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeCellMovementT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeCellActionsT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeMovingAliveCellsT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeJoinCellsListT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeDecreaseFoodT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			MPI_Gather(&timeDataCollectionT, 1, MPI_DOUBLE, NULL, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		}
 #endif
 
-	/* 6. Output for leaderboard */
-	if (rank == 0)
-	{
-		printf("\n");
-		/* 6.1. Total computation time */
-		printf("Time: %lf\n", ttotal);
+		/* 6. Output for leaderboard */
+		if (rank == 0)
+		{
+			printf("\n");
+			/* 6.1. Total computation time */
+			printf("Time: %lf\n", ttotal);
 
-		/* 6.2. Results: Number of iterations and other statistics */
-		printf("Result: %d, ", iter);
-		printf("%d, %d, %d, %d, %d, %d, %d, %f\n",
-			   num_cells_alive,
-			   sim_stat.history_total_cells,
-			   sim_stat.history_dead_cells,
-			   sim_stat.history_max_alive_cells,
-			   sim_stat.history_max_new_cells,
-			   sim_stat.history_max_dead_cells,
-			   sim_stat.history_max_age,
-			   sim_stat.history_max_food
-				);
+			/* 6.2. Results: Number of iterations and other statistics */
+			printf("Result: %d, ", iter);
+			printf("%d, %d, %d, %d, %d, %d, %d, %f\n",
+				   num_cells_alive,
+				   sim_stat.history_total_cells,
+				   sim_stat.history_dead_cells,
+				   sim_stat.history_max_alive_cells,
+				   sim_stat.history_max_new_cells,
+				   sim_stat.history_max_dead_cells,
+				   sim_stat.history_max_age,
+				   sim_stat.history_max_food);
+		}
+		/* 7. Free resources */
+		free(culture);
+		free(culture_cells);
+		free(cells);
+
+		/* 8. End */
+		MPI_Finalize();
+		return 0;
 	}
-	/* 7. Free resources */
-	free(culture);
-	free(culture_cells);
-	free(cells);
 
-	/* 8. End */
-	MPI_Finalize();
-	return 0;
-}
+	/* function to compare cells by position*/
+	int compareCells(const void *_a, const void *_b)
+	{
+
+		Cell *a, *b;
+
+		a = (Cell *)_a;
+		b = (Cell *)_b;
+		if (a->pos_row < b->pos_row)
+		{
+			return -1;
+		}
+		if (a->pos_row > b->pos_row)
+		{
+			return 1;
+		}
+		if (a->pos_col < b->pos_col)
+		{
+			return -1;
+		}
+		return 1;
+	}
