@@ -42,6 +42,7 @@ void printTimes(double *timeGatherer, int nprocs, double ttotal)
 		printf("%0.6lf%%\t", timeGatherer[i] / ttotal * 100);
 	printf("\n\tTotal: \t\t" ANSI_COLOR_GREEN "%0.6lf" ANSI_COLOR_RESET " \n\tPorcentaje:\t" ANSI_COLOR_GREEN "%0.6lf%%" ANSI_COLOR_RESET "\n", totalGatheredTime / nprocs, (totalGatheredTime / nprocs) / ttotal * 100);
 }
+#endif
 
 /* Structure to store data of a cell */
 typedef struct {
@@ -239,8 +240,10 @@ int main(int argc, char *argv[]) {
 
 	/* 0. Initialize MPI */
 	int rank;
+	int nprocs;
 	MPI_Init( &argc, &argv );
 	MPI_Comm_rank( MPI_COMM_WORLD, &rank );
+	MPI_Comm_size( MPI_COMM_WORLD, &nprocs);
 
 	/* 1. Read simulation arguments */
 	/* 1.1. Check minimum number of arguments */
@@ -344,8 +347,9 @@ int main(int argc, char *argv[]) {
  *
  */
 
- #if !defined(CP_TABLON)	  //Precompilaciñon para evitar medir tiempos en el momento de la prueba en el servidor http://frontendv.infor.uva.es/faq#6 \
- 						  // 2.1 Time variables for single loop iterations
+ #if !defined(CP_TABLON)	  //Precompilaciñon para evitar medir tiempos en el momento de la prueba en el servidor http://frontendv.infor.uva.es/faq#6
+
+	// 2.1 Time variables for single loop iterations
  	double timeInitCS;	  // 3.1 Initialize culture surface
  	double timeInitCells; // 3.2 Initialize cells
 
