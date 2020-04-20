@@ -740,6 +740,9 @@ int main(int argc, char *argv[]) {
 		print_status( iter, rows, columns, culture, num_cells, cells, num_cells_alive, sim_stat );
 #endif // DEBUG
 	}
+	#if !defined(CP_TABLON)
+			timeML = MPI_Wtime() - timeML;
+	#endif
 
 
 /*
