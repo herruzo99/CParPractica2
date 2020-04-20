@@ -246,6 +246,15 @@ int main(int argc, char *argv[])
 	int num_cells; // Number of cells currently stored in the list
 	Cell *cells;   // List to store cells information
 
+	// Data needed for parallel task
+	int tag;
+	float *my_culture;			// Cultivation area values PER PROCESS
+	short *my_culture_cells;		// Ancillary structure to count the number of cells in a culture space PER PROCESS
+	int my_rows_number = 0;
+	int rows_left = 0;
+	int my_begin = 0;
+	int my_end;
+
 	// Statistics
 	Statistics sim_stat;
 	sim_stat.history_total_cells = 0;
@@ -410,7 +419,7 @@ int main(int argc, char *argv[])
 
 	//Variable for general check of cell alive
 	bool any_cell_alive = false;
-	
+
 	if (num_cells > 0)
 	{
 		any_cell_alive = true;
@@ -443,7 +452,7 @@ int main(int argc, char *argv[])
 	MPI_Type_create_resized(MPI_CellNoDis, lb, extent, &MPI_Cell);
 	MPI_Type_commit(&MPI_Cell);
 
-	/*Culture cells distribution 
+	/*Culture cells distribution
 	if (columns > rows){
 		int aux = rows;
 		rows = columns;
@@ -475,7 +484,31 @@ int main(int argc, char *argv[])
 	int lower_proc = rank - 1;
 	if (lower_proc < 0)
 		lower_proc = nprocs - 1;
+	/*
+	// Create the distributed surfaces for the process
+	my_rows_number = rows / nprocs;
+	rows_left = rows % nprocs;
+	for (i = 0; i < rows_left; i++){
+		if((i % nprocs) == rank)	rows_left;
+	}
 
+	my_begin;
+	MPI_Status status;
+	tag = 1000;
+	if (nprocs > 1) {
+		if (rank == 0){
+			my_begin = 0;
+			my_end = my_begin + my_rows_number - 1;
+			MPI_Send( &my_end, 1, MPI_INT, rank + 1, tag, MPI_COMM_WORLD);
+		}else{
+			MPI_Recv( &my_begin, 1, MPI_INT, rank - 1, tag, MPI_COMM_WORLD, &status);
+			my_end = my_begin + my_rows_number;
+			if (rank != nprocs - 1){
+				MPI_Send( &my_end, 1, MPI_INT, rank + 1, tag, MPI_COMM_WORLD);
+			}
+		}
+	}
+	*/
 	printf("%d %d %d\n", rank, upper_proc, lower_proc);
 	culture = (float *)malloc(sizeof(float) * (size_t)num_culture_cells);
 	culture_cells = (short *)malloc(sizeof(short) * (size_t)num_culture_cells);
@@ -952,7 +985,7 @@ int main(int argc, char *argv[])
 				short count = accessMat(culture_cells, cells[i].pos_row, cells[i].pos_col);
 				float my_food = food / count;
 				cells[i].storage += my_food;
-				
+
 				/* 4.4.2. Split cell if the conditions are met: Enough maturity and energy */
 				if (cells[i].age > 30 && cells[i].storage > 20)
 				{
@@ -1111,7 +1144,7 @@ int main(int argc, char *argv[])
 #ifdef DEBUG
 		/* 4.10. DEBUG: Print the current state of the simulation at the end of each iteration */
 		//if (rank == 0)
-		
+
 			//print_status(iter, rows, columns, culture, num_cells, cells, num_cells_alive, sim_stat);
 #endif // DEBUG
 		}
