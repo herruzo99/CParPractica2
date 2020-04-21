@@ -452,19 +452,21 @@ int main(int argc, char *argv[])
 	MPI_Type_create_resized(MPI_CellNoDis, lb, extent, &MPI_Cell);
 	MPI_Type_commit(&MPI_Cell);
 
-	/*Culture cells distribution
+	/*Culture cells distribution*/
 	if (columns > rows){
 		int aux = rows;
 		rows = columns;
 		columns = aux;
-	}*/
+	}
 
 	if(nprocs > rows){
-		nprocs = rows;
-	}
-	if(rank > nprocs){
-		MPI_Finalize();
-		return(0);
+		if(rank > nprocs){
+			MPI_Finalize();
+			return(0);
+		}
+		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+		MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 	}
 	int num_culture_cells = rows * columns;
 
@@ -572,7 +574,6 @@ int main(int argc, char *argv[])
 				}
 				else
 				{
-
 					num_init_cells_for_all[j]++;
 					j = nprocs;
 				}
@@ -611,10 +612,12 @@ int main(int argc, char *argv[])
 	}
 	free(cells);
 	cells = cells_subpart;
+	
 #if !defined(CP_TABLON)
 	timeInitCells = MPI_Wtime() - timeInitCells;
 #endif
-
+	MPI_Finalize();
+	return(0);
 	// Statistics: Initialize total number of cells, and max. alive
 	sim_stat.history_total_cells = num_cells;
 	sim_stat.history_max_alive_cells = num_cells;
