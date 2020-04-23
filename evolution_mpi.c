@@ -460,7 +460,6 @@ int main(int argc, char *argv[])
 		MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 	}
 	*/
-	int num_culture_cells = rows * columns;
 
 	/* Num of culture cells of every procesor */
 	int self_rows = rows / nprocs;
@@ -472,7 +471,6 @@ int main(int argc, char *argv[])
 	}
 	/* Min and max culture cell for each procesor */
 	int min_proc_rows = rank * self_rows + (rank < offset_rows ? rank : offset_rows);
-
 
 	if (rank < offset_rows)
 		self_rows++;
@@ -516,11 +514,9 @@ int main(int argc, char *argv[])
 		}
 	}
 	*/
-	culture = (float *)malloc(sizeof(float) * (size_t)num_culture_cells);
-	culture_cells = (short *)malloc(sizeof(short) * (size_t)num_culture_cells);
-	short *culture_cells_aux = (short *)malloc(sizeof(short) * (size_t)num_culture_cells);
-	float *culture_aux = (float *)malloc(sizeof(float) * (size_t)num_culture_cells);
-	if (culture == NULL || culture_cells == NULL || culture_cells_aux == NULL || culture_aux == NULL)
+	culture = (float *)malloc(sizeof(float) * (size_t)self_rows * columns);
+	culture_cells = (short *)malloc(sizeof(short) * (size_t)self_rows * columns);
+	if (culture == NULL || culture_cells == NULL)
 	{
 		fprintf(stderr, "-- Error allocating culture structures for size: %d x %d \n", rows, columns);
 		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
@@ -528,7 +524,7 @@ int main(int argc, char *argv[])
 #if !defined(CP_TABLON)
 	timeInitCS = MPI_Wtime();
 #endif
-	for (i = 0; i < rows; i++)
+	for (i = 0; i < self_rows; i++)
 		for (j = 0; j < columns; j++)
 		{
 			accessMat(culture, i, j) = 0.0;
@@ -610,7 +606,7 @@ int main(int argc, char *argv[])
 
 	for (iter = 0; iter < max_iter && current_max_food <= max_food && any_cell_alive; iter++)
 	{
-
+		//if(rank ==0) printf("%d\n", iter);
 		int step_new_cells = 0;
 		int step_dead_cells = 0;
 
@@ -625,7 +621,8 @@ int main(int argc, char *argv[])
 			int row = (int)(rows * erand48(food_random_seq));
 			int col = (int)(columns * erand48(food_random_seq));
 			float food = (float)(food_level * erand48(food_random_seq));
-			accessMat(culture, row, col) = accessMat(culture, row, col) + food;
+			if (min_proc_rows <= row && row < max_proc_rows[rank])
+				accessMat(culture, row - min_proc_rows, col) = accessMat(culture, row - min_proc_rows, col) + food;
 		}
 
 #if !defined(CP_TABLON)
@@ -644,7 +641,8 @@ int main(int argc, char *argv[])
 				int row = food_spot_row + (int)(food_spot_size_rows * erand48(food_spot_random_seq));
 				int col = food_spot_col + (int)(food_spot_size_cols * erand48(food_spot_random_seq));
 				float food = (float)(food_spot_level * erand48(food_spot_random_seq));
-				accessMat(culture, row, col) = accessMat(culture, row, col) + food;
+				if (min_proc_rows <= row && row < max_proc_rows[rank])
+					accessMat(culture, row - min_proc_rows, col) = accessMat(culture, row - min_proc_rows, col) + food;
 			}
 		}
 #if !defined(CP_TABLON)
@@ -674,8 +672,8 @@ int main(int argc, char *argv[])
 		{
 			cells_to_exchange[i] = 0;
 		}
-		i=0;
-		while ( i+step_dead_cells < num_cells)
+		i = 0;
+		while (i + step_dead_cells < num_cells)
 		{
 			cells[i].age++;
 			// Statistics: Max age of a cell in the simulation history
@@ -690,8 +688,8 @@ int main(int argc, char *argv[])
 				num_cells_alive--;
 				step_dead_cells++;
 				cell_exchange_aux = cells[i];
-				cells[i] = cells[num_cells- step_dead_cells];
-				cells[num_cells- step_dead_cells] = cell_exchange_aux;
+				cells[i] = cells[num_cells - step_dead_cells];
+				cells[num_cells - step_dead_cells] = cell_exchange_aux;
 				continue;
 			}
 			if (cells[i].storage < 1.0f)
@@ -750,7 +748,7 @@ int main(int argc, char *argv[])
 				}
 				else if ((int)actual_cell.pos_row < max_proc_rows[j])
 				{
-							//			printf("Rank: %d Cell %d (%lf) in %d\n", rank, i, cells[i].pos_row, j);
+					//			printf("Rank: %d Cell %d (%lf) in %d\n", rank, i, cells[i].pos_row, j);
 
 					cells_to_exchange[j]++;
 					changed = true;
@@ -765,11 +763,8 @@ int main(int argc, char *argv[])
 		} // End cell movements
 		/* Sync the culture_cells in all processes */
 
-#if !defined(CP_TABLON)
-		timeCellMovementL = MPI_Wtime() - timeCellMovementL;
-		timeCellMovementT += timeCellMovementL;
-#endif
-/*
+
+/*		
 	for (i = 0; i < num_cells; i++)
 	{
 		printf("\tITER: %d RANK: %d, Cell %d, Pos(%f,%f), Mov(%f,%f), Choose_mov(%f,%f,%f), Storage: %f, Age: %d\n",
@@ -785,7 +780,6 @@ int main(int argc, char *argv[])
 			   cells[i].age);
 	}
 */
-	MPI_Barrier(MPI_COMM_WORLD);
 		int sndcnts[nprocs];
 		int displs[nprocs];
 		sndcnts[0] = cells_to_exchange[0];
@@ -796,7 +790,7 @@ int main(int argc, char *argv[])
 			sndcnts[i] = cells_to_exchange[i] - cells_to_exchange[i - 1];
 			displs[i] = cells_to_exchange[i - 1];
 		}
-		/*
+	/*	
 for(i = 0; i < nprocs; i++){
 			printf("ITER: %d %d to: %d cnt: %d dis: %d exchange: %d\n",iter,rank, i,sndcnts[i],displs[i],cells_to_exchange[i]);
 		}
@@ -805,7 +799,7 @@ for(i = 0; i < nprocs; i++){
 		}
 		*/
 		int num_total_recived = 0;
-		int num_cells_to_recive = 0;
+		int num_cells_to_recive = 0, num_max_recived = 0;
 		Cell *cells_recived, *total_cells_recived;
 		cells_recived = (Cell *)malloc(sizeof(Cell));
 		total_cells_recived = (Cell *)malloc(sizeof(Cell));
@@ -816,8 +810,12 @@ for(i = 0; i < nprocs; i++){
 
 			if (num_cells_to_recive > 0)
 			{
-
+				if(num_max_recived < num_cells_to_recive){
+				num_max_recived = num_cells_to_recive;
+				free(cells_recived);
 				cells_recived = (Cell *)malloc(sizeof(Cell) * (size_t)num_cells_to_recive);
+				}
+
 				total_cells_recived = (Cell *)realloc(total_cells_recived, sizeof(Cell) * (size_t)(num_total_recived + num_cells_to_recive));
 
 				food_to_share = (float *)realloc(food_to_share, sizeof(float) * (size_t)(num_total_recived + num_cells_to_recive));
@@ -837,19 +835,21 @@ for(i = 0; i < nprocs; i++){
 				{
 					total_cells_recived[num_total_recived + j] = cells_recived[j];
 					/* 4.3.4. Annotate that there is one more cell in this culture position */
-					accessMat(culture_cells, cells_recived[j].pos_row, cells_recived[j].pos_col) += 1;
+					accessMat(culture_cells, cells_recived[j].pos_row - min_proc_rows , cells_recived[j].pos_col) += 1;
 					/* 4.3.5. Annotate the amount of food to be shared in this culture position */
-					food_to_share[num_total_recived + j] = accessMat(culture, cells_recived[j].pos_row, cells_recived[j].pos_col);
+					food_to_share[num_total_recived + j] = accessMat(culture, cells_recived[j].pos_row - min_proc_rows , cells_recived[j].pos_col);
 				}
 				num_total_recived += num_cells_to_recive;
-				free(cells_recived);
-
 			}
 		}
-
+		free(cells_recived);
 		free(cells);
 		cells = total_cells_recived;
 		num_cells = num_total_recived;
+		#if !defined(CP_TABLON)
+		timeCellMovementL = MPI_Wtime() - timeCellMovementL;
+		timeCellMovementT += timeCellMovementL;
+#endif
 		/*
 			for (i = 0; i < num_cells; i++)
 	{
@@ -871,8 +871,7 @@ for(i = 0; i < nprocs; i++){
 			   cells[i].choose_mov[2],
 			   cells[i].storage,
 			   cells[i].age);
-	}
-*/
+	}*/
 
 
 /* 4.4. Cell actions */
@@ -894,7 +893,7 @@ for(i = 0; i < nprocs; i++){
 			{
 				/* 4.4.1. Food harvesting */
 				float food = food_to_share[i];
-				short count = accessMat(culture_cells, cells[i].pos_row, cells[i].pos_col);
+				short count = accessMat(culture_cells, cells[i].pos_row - min_proc_rows, cells[i].pos_col);
 				float my_food = food / count;
 				cells[i].storage += my_food;
 				//printf("ITER: %d Cell: %d my_foo %lf = %lf / %d\n",iter, i, my_food,food,count);
@@ -928,7 +927,7 @@ for(i = 0; i < nprocs; i++){
 					cell_mutation(&cells[i]);
 					cell_mutation(&new_cells[step_new_cells - 1]);
 				}
-				accessMat(culture, cells[i].pos_row, cells[i].pos_col) = 0.0f;
+				accessMat(culture, cells[i].pos_row - min_proc_rows, cells[i].pos_col) = 0.0f;
 			}
 		} // End cell actions
 #if !defined(CP_TABLON)
@@ -986,14 +985,9 @@ for(i = 0; i < nprocs; i++){
 #if !defined(CP_TABLON)
 		timeDecreaseFoodL = MPI_Wtime();
 #endif
-		/* Sync the culture in all processes */
-		MPI_Allreduce(culture, culture_aux, num_culture_cells, MPI_FLOAT, MPI_MIN, MPI_COMM_WORLD);
-		float *aux_for_interchange_culture = culture;
-		culture = culture_aux;
-		culture_aux = aux_for_interchange_culture;
 
 		current_max_food = 0.0f;
-		for (i = 0; i < rows; i++)
+		for (i = 0; i < self_rows; i++)
 			for (j = 0; j < columns; j++)
 			{
 				accessMat(culture_cells, i, j) = 0.0f;
@@ -1033,7 +1027,8 @@ for(i = 0; i < nprocs; i++){
 		/* 4.9. Statistics */
 		// Statistics: Max food
 		float aux_float;
-		MPI_Reduce(&current_max_food, &aux_float, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
+		MPI_Allreduce(&current_max_food, &aux_float, 1, MPI_FLOAT, MPI_MAX, MPI_COMM_WORLD);
+		current_max_food = aux_float;
 		if (aux_float > sim_stat.history_max_food)
 			sim_stat.history_max_food = aux_float;
 		// Statistics: Max new cells per step
@@ -1056,6 +1051,7 @@ for(i = 0; i < nprocs; i++){
 		if (rank == 0)
 			print_status(iter, rows, columns, culture, num_cells, cells, num_cells_alive, sim_stat);
 #endif // DEBUG
+
 	}
 #if !defined(CP_TABLON)
 	timeML = MPI_Wtime() - timeML;
