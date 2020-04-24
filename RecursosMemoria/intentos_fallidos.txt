@@ -1,0 +1,3 @@
+Puede estar bien rellenar la memoria con cosas que intentamos si fuera necesario, especialemente en mi caso xddddd
+
+- Intento de paralelizacion de food_spread basado en dos matrices que guardan el historial de accesos sobre la misma posicion de la matriz para asi poder recosntruir las sumas de floats sin afectar a los ultimos decimales de estas.
