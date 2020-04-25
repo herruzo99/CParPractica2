@@ -983,13 +983,37 @@ int main(int argc, char *argv[])
 				cells[num_cells + j] = new_cells[j];
 			num_cells += step_new_cells;
 		}
+				free(new_cells);
+
 #if !defined(CP_TABLON)
 		timeJoinCellsListL = MPI_Wtime() - timeJoinCellsListL;
 		timeJoinCellsListT += timeJoinCellsListL;
 		MPI_Barrier(MPI_COMM_WORLD);
 
 #endif
-		free(new_cells);
+
+
+/* 4.8. Decrease non-harvested food */
+#if !defined(CP_TABLON)
+		timeDecreaseFoodL = MPI_Wtime();
+#endif
+
+		current_max_food = 0.0f;
+		for (i = 0; i < self_rows; i++)
+			for (j = 0; j < columns; j++)
+			{
+				accessMat(culture_cells, i, j) = 0.0f;
+				accessMat(culture, i, j) *= 0.95f; // Reduce 5%
+				if (accessMat(culture, i, j) > current_max_food)
+					current_max_food = accessMat(culture, i, j);
+			}
+
+#if !defined(CP_TABLON)
+		timeDecreaseFoodL = MPI_Wtime() - timeDecreaseFoodL;
+		timeDecreaseFoodT += timeDecreaseFoodL;
+		MPI_Barrier(MPI_COMM_WORLD);
+
+#endif
 
 #if !defined(CP_TABLON)
 		timeDataCollectionL = MPI_Wtime();
@@ -1082,27 +1106,6 @@ int main(int argc, char *argv[])
 
 #endif
 
-/* 4.8. Decrease non-harvested food */
-#if !defined(CP_TABLON)
-		timeDecreaseFoodL = MPI_Wtime();
-#endif
-
-		current_max_food = 0.0f;
-		for (i = 0; i < self_rows; i++)
-			for (j = 0; j < columns; j++)
-			{
-				accessMat(culture_cells, i, j) = 0.0f;
-				accessMat(culture, i, j) *= 0.95f; // Reduce 5%
-				if (accessMat(culture, i, j) > current_max_food)
-					current_max_food = accessMat(culture, i, j);
-			}
-
-#if !defined(CP_TABLON)
-		timeDecreaseFoodL = MPI_Wtime() - timeDecreaseFoodL;
-		timeDecreaseFoodT += timeDecreaseFoodL;
-		MPI_Barrier(MPI_COMM_WORLD);
-
-#endif
 
 #ifdef DEBUG
 		/* 4.10. DEBUG: Print the current state of the simulation at the end of each iteration */
