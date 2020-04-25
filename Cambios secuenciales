@@ -25,3 +25,6 @@ como la celula nueva
 iteracion del bucle dde cell actions
 - Hay un cambio en la linea 676 del codigo anterior que no avabo de entender
  para que la usabamos
+
+
+Se me ha ocurrido añadir en cada celula una propiedad que indique su posicion en las matrices para evitar tener que acceder haciendo la multiplicaicon constantemente
