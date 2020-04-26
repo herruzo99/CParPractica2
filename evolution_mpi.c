@@ -609,7 +609,8 @@ int main(int argc, char *argv[])
 	int iter;
 	int num_new_sources = (int)(rows * columns * food_density);
 	int num_new_sources_spot = (int)(food_spot_size_rows * food_spot_size_cols * food_spot_density);
-	int syncCulture = 1;
+	int syncCulture = max_iter / 10;
+	syncCulture++;
 
 	int sndcnts[nprocs];
 	int displs[nprocs];
@@ -641,16 +642,15 @@ int main(int argc, char *argv[])
 			cells_per_proc = (total_num_cells / (float)nprocs);
 			for (i = 0; i < nprocs - 1; i++)
 			{
-				relative_num_cells_sum = 0;
+				relative_num_cells_sum = num_cells_all[0];
 				j = 0;
-				do
+				while (j < nprocs-1 && relative_num_cells_sum < cells_per_proc * (i + 1))
 				{
-					relative_num_cells_sum += num_cells_all[j];
 					j++;
-				} while (j < nprocs && relative_num_cells_sum < cells_per_proc * (i + 1));
+					relative_num_cells_sum += num_cells_all[j];
+				} 
+				int cells_lower = relative_num_cells_sum - num_cells_all[j];
 
-				
-				int cells_lower = relative_num_cells_sum - num_cells_all[j-1];
 			//	printf("Rank: %d for %d j: %d %d+(%d-%d)/(%d-%d)*(%lf-%d)\n", rank, i, j, max_proc_rows[j - 1], max_proc_rows[j], max_proc_rows[j - 1], relative_num_cells_sum, cells_lower, cells_per_proc * (i + 1), cells_lower);
 		/*
 									printf("r %d\n", rank);
@@ -668,13 +668,13 @@ int main(int argc, char *argv[])
 				{
 					new_proc_rows[i] = (int)(max_proc_rows[j - 1] + (((max_proc_rows[j] - max_proc_rows[j - 1]) / (float)num_cells_all[j]) * ((cells_per_proc * (i + 1)) - cells_lower)));
 				}
-				new_proc_rows[i] = max_proc_rows[i];
+			//	new_proc_rows[i] = max_proc_rows[i];
 			}
 			new_proc_rows[nprocs - 1] = rows;
 
 			for (i = 0; i < nprocs; i++)
 			{
-				//printf("Iter: %d Rank: %d num_cells: %d For %d max_proc_act: %d new_max_proc: %d \n", iter, rank, num_cells, i, max_proc_rows[i], new_proc_rows[i]);
+			//	printf("Iter: %d Rank: %d num_cells: %d For %d max_proc_act: %d new_max_proc: %d \n", iter, rank, num_cells, i, max_proc_rows[i], new_proc_rows[i]);
 				/*
 				printf("Iter: %d  \n", iter);
 				printf("Rank: %d \n", rank);
