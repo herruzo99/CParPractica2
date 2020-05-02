@@ -450,30 +450,6 @@ int main(int argc, char *argv[])
 	MPI_Type_create_resized(MPI_CellNoDis, lb, extent, &MPI_Cell);
 	MPI_Type_commit(&MPI_Cell);
 
-	/* Create MPI_Row datatype 
-	MPI_Datatype MPI_Row;
-	MPI_Type_contiguous(columns, MPI_FLOAT, &MPI_Row);
-	MPI_Type_commit(&MPI_Row);
-*/
-	/* EN PROCESO  No devuelve el mismo resultado
-	Culture cells distribution
-	if (columns > rows){
-		int aux = rows;
-		rows = columns;
-		columns = aux;
-	}
-
-	if(nprocs > rows){
-		if(rank >= rows){
-			MPI_Finalize();
-			return(0);
-		}
-		MPI_Barrier(MPI_COMM_WORLD);
-		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-		MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-	}
-	*/
-
 	/* Num of initial rows of every procesor */
 	int num_cells_alive;
 	int iter;
@@ -522,20 +498,6 @@ int main(int argc, char *argv[])
 		max_proc_positions[nprocs-1]=positions;
 		if(rank == nprocs-1) self_positions += offset_positions;
 
-/*
-	int self_positions = positions / nprocs;
-	int offset_positions = positions - (self_positions * nprocs);
-	// Min and max culture cell for each procesor
-	int max_proc_positions[nprocs];
-	for (i = 0; i < nprocs; i++)
-	{
-		max_proc_positions[i] = i * self_positions + self_positions + (i < offset_positions ? i + 1 : offset_positions);
-	}
-	int min_proc_positions = rank * self_positions + (rank < offset_positions ? rank : offset_positions);
-
-	if (rank < offset_positions)
-		self_positions++;
-*/
 	culture = (float *)calloc(sizeof(float), (size_t)self_positions);
 	culture_cells = (short *)calloc(sizeof(short), (size_t)self_positions);
 	if (culture == NULL || culture_cells == NULL)
@@ -619,8 +581,6 @@ int main(int argc, char *argv[])
 	float current_max_food = 0.0f;
 	int num_new_sources = (int)(rows * columns * food_density);
 	int num_new_sources_spot = (int)(food_spot_size_rows * food_spot_size_cols * food_spot_density);
-	/*int syncCulture =50;
-		int now_alive = 0;*/
 	int sndcnts[nprocs];
 	int displs[nprocs];
 	for (iter = 0; iter < max_iter && current_max_food <= max_food && any_cell_alive; iter++)
@@ -633,236 +593,7 @@ int main(int argc, char *argv[])
 		timeSyncCultureL = MPI_Wtime();
 
 #endif
-/*
-			if ( iter == syncCulture)
-			{
-				int total_num_cells = 0, relative_num_cells_sum = 0;
-				float cells_per_proc;
-				int num_cells_all[nprocs];
-				int new_proc_positions[nprocs];
-				MPI_Allgather(&num_cells, 1, MPI_INT, num_cells_all, 1, MPI_INT, MPI_COMM_WORLD);
 
-				for (i = 0; i < nprocs; i++)
-				{
-					total_num_cells += num_cells_all[i];
-				}
-
-				cells_per_proc = (total_num_cells / (float)nprocs);
-				for (i = 0; i < nprocs - 1; i++)
-				{
-					relative_num_cells_sum = num_cells_all[0];
-					j = 0;
-					while (j < nprocs - 1 && relative_num_cells_sum < cells_per_proc * (i + 1))
-					{
-						j++;
-						relative_num_cells_sum += num_cells_all[j];
-					}
-					int cells_lower = relative_num_cells_sum - num_cells_all[j];
-
-					//("Rank: %d for %d j: %d %d+(%d-%d)/(%d-%d)*(%lf-%d)\n", rank, i, j, max_proc_positions[j - 1], max_proc_positions[j], max_proc_positions[j - 1], relative_num_cells_sum, cells_lower, cells_per_proc * (i + 1), cells_lower);
-					/*
-									printf("r %d\n", rank);
-					printf("j %d\n", j);
-					printf("m %d\n", max_proc_positions[j]);
-					printf("mj-1 %d\n", max_proc_positions[j - 1]);
-					printf("rev %d\n", relative_num_cells_sum);
-					printf("low %d\n", cells_lower);
-					printf("per %lf\n", cells_per_proc * (i + 1));
-					if (j == 0)
-					{
-						new_proc_positions[i] = (int)((max_proc_positions[j] / (float)num_cells_all[j]) * ((cells_per_proc * (i + 1)) - cells_lower));
-					}
-					else
-					{
-						new_proc_positions[i] = (int)(max_proc_positions[j - 1] + (((max_proc_positions[j] - max_proc_positions[j - 1]) / (float)num_cells_all[j]) * ((cells_per_proc * (i + 1)) - cells_lower)));
-					}
-					//new_proc_positions[i] = max_proc_positions[i];
-				}
-				new_proc_positions[nprocs - 1] = positions;
-
-				for (i = 0; i < nprocs; i++)
-				{
-					//printf("Iter: %d Rank: %d num_cells: %d For %d max_proc_act: %d new_max_proc: %d self: %d \n", iter, rank, num_cells, i, max_proc_positions[i], new_proc_positions[i], self_positions);
-					/*
-				printf("Iter: %d  \n", iter);
-				printf("Rank: %d \n", rank);
-				printf("num_cells: %d  \n", num_cells);
-				printf(" For %d  \n", i);
-				printf(" max_proc_act: %d  \n", max_proc_positions[i]);
-				printf(" new_max_proc: %d \n", new_proc_positions[i]);
-				}
-				if (rank == 0)
-				{
-
-					displs[0] = 0;
-
-					if (new_proc_positions[0] > max_proc_positions[rank])
-					{
-						sndcnts[0] = self_positions;
-					}
-					else
-					{
-						sndcnts[0] = new_proc_positions[0];
-					}
-				}
-				else
-				{
-					if (max_proc_positions[rank - 1] >= new_proc_positions[0])
-					{
-						displs[0] = 0;
-						sndcnts[0] = 0;
-					}
-					else
-					{
-
-						displs[0] = 0;
-
-						if (new_proc_positions[0] > max_proc_positions[rank])
-						{
-							sndcnts[0] = self_positions;
-						}
-						else
-						{
-							sndcnts[0] = (new_proc_positions[0] - max_proc_positions[rank - 1]);
-						}
-					}
-				}
-				for (i = 1; i < nprocs; i++)
-				{
-					if (rank == 0)
-					{
-
-						if (max_proc_positions[rank] <= new_proc_positions[i - 1])
-						{
-							displs[i] = 0;
-							sndcnts[i] = 0;
-						}
-						else
-						{
-
-							displs[i] = new_proc_positions[i - 1];
-
-							if (new_proc_positions[i] > max_proc_positions[rank])
-							{
-								sndcnts[i] = self_positions - displs[i];
-							}
-							else
-							{
-								sndcnts[i] = new_proc_positions[i] - displs[i];
-							}
-						}
-					}
-					else
-					{
-
-						if (max_proc_positions[rank] <= new_proc_positions[i - 1] || max_proc_positions[rank - 1] >= new_proc_positions[i])
-						{
-							displs[i] = 0;
-							sndcnts[i] = 0;
-						}
-						else
-						{
-							if (new_proc_positions[i - 1] > max_proc_positions[rank - 1])
-							{
-								displs[i] = new_proc_positions[i - 1] - max_proc_positions[rank - 1];
-							}
-							else
-							{
-								displs[i] = 0;
-							}
-
-							if (new_proc_positions[i] > max_proc_positions[rank])
-							{
-								sndcnts[i] = self_positions - displs[i];
-							}
-							else
-							{
-								sndcnts[i] = (new_proc_positions[i] - max_proc_positions[rank - 1]) - displs[i];
-							}
-						}
-					}
-				}
-
-				for (j = 0; j < nprocs - 1; j++)
-				{
-					max_proc_positions[j] = new_proc_positions[j];
-				}
-				if (rank != 0)
-				{
-					min_proc_positions = max_proc_positions[rank - 1];
-				}
-
-				self_positions = max_proc_positions[rank] - min_proc_positions;
-
-				for (i = 0; i < nprocs; i++)
-				{
-					//	printf("Rank: %d self %d tiene de %d max %d\n", rank, self_positions, i,max_proc_positions[i]);
-				}
-
-				//printf("Iter: %d Rank: %d | self %d = %d -%d\n", iter, rank, self_positions, max_proc_positions[rank], min_proc_positions);
-
-				for (i = 0; i < nprocs; i++)
-				{
-					//	printf("Iter: %d Rank: %d to %d dis %d cnt %d new_proc_row %d\n", iter, rank, i, displs[i], sndcnts[i], new_proc_positions[i]);
-				}
-				//Iterate all the processes so everyone can tell the others the number of cells to recieve.
-				int num_positions_to_recive[nprocs], num_max_positions_to_recive = 0, num_total_positions_to_recive = 0;
-				float *total_positions_to_recive;
-
-				MPI_Alltoall(sndcnts, 1, MPI_INT, num_positions_to_recive, 1, MPI_INT, MPI_COMM_WORLD);
-				for (i = 0; i < nprocs; i++)
-				{
-					num_total_positions_to_recive += num_positions_to_recive[i];
-				}
-				for (i = 0; i < nprocs; i++)
-				{
-					//	printf("Rank: %d recive from %d cnt %d de %d\n", rank, i, num_positions_to_recive[i], self_positions);
-				}
-
-				if (num_total_positions_to_recive > 0)
-				{
-					total_positions_to_recive = (float *)malloc(sizeof(float) * (size_t)(num_total_positions_to_recive));
-
-					free(culture_cells);
-					culture_cells = (short *)malloc(sizeof(short) * (size_t)self_positions);
-					if (total_positions_to_recive == NULL || culture_cells == NULL)
-					{
-						fprintf(stderr, "-- Error allocating culture structures in sync %d * %d\n", self_positions, columns);
-						MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-					}
-					//		printf("Value: %ld\n", sizeof(short) * (size_t)self_positions * (size_t)columns);
-					for (j = 0; j < (size_t)self_positions; j++)
-					{
-						culture_cells[j] = 0;
-					}
-				}
-				else
-				{
-					total_positions_to_recive = NULL;
-				}
-
-				int revcdispls[nprocs];
-				revcdispls[0] = 0;
-				//Iterate all the processes so everyone can send the cells.
-				for (i = 1; i < nprocs; i++)
-				{
-					revcdispls[i] = revcdispls[i - 1] + num_positions_to_recive[i - 1];
-				}
-
-				MPI_Alltoallv(culture, sndcnts, displs, MPI_FLOAT, total_positions_to_recive, num_positions_to_recive, revcdispls, MPI_FLOAT, MPI_COMM_WORLD);
-				for (i = 0; i < self_positions; i++)
-				{
-					//	printf("%d ANTES CULTURE %d culture %lf in %d (%d) %d\n", iter, rank,total_positions_to_recive[i], i, i + min_proc_positions, j);
-				}
-				//free memory
-
-				if (num_total_positions_to_recive > 0)
-				{
-					free(culture);
-					culture = total_positions_to_recive;
-				}
-			}
-*/
 #if !defined(CP_TABLON)
 		timeSyncCultureL = MPI_Wtime() - timeSyncCultureL;
 		timeSyncCultureT += timeSyncCultureL;
@@ -943,9 +674,7 @@ int main(int argc, char *argv[])
 			if (cells[i].storage < 0.1f)
 			{
 				// Cell has died and is replaced from one from the end
-				//cells[i].alive = false;
 				step_dead_cells++;
-				//cells[i] = cells[num_cells - step_dead_cells];
 				continue;
 			}
 			if (cells[i].storage < 1.0f)
@@ -989,12 +718,10 @@ int main(int argc, char *argv[])
 				if (cells[i].pos_col >= columns)
 					cells[i].pos_col -= columns;
 			}
-			//ARREGLAR BIEN
 			//Sort the array while using it so we can send the array to the other procs
 			if (cellPos(cells[i]) < max_proc_positions[rank] && cellPos(cells[i]) >= min_proc_positions)
 			{
 				total_cells_recived[num_cells_in_this_proc] = cells[i];
-				//printf("%d ACCESO %d min %d self %d\n", rank, (int)total_cells_recived[num_cells_in_this_proc].pos_row*columns+(int)total_cells_recived[num_cells_in_this_proc].pos_col-min_proc_positions, min_proc_positions, self_positions);
 				accessMatWithSub(culture_cells, total_cells_recived[num_cells_in_this_proc].pos_row, total_cells_recived[num_cells_in_this_proc].pos_col, min_proc_positions) += 1;
 				/* 4.3.5. Annotate the amount of food to be shared in this culture position */
 				food_to_share[num_cells_in_this_proc] = accessMatWithSub(culture, total_cells_recived[num_cells_in_this_proc].pos_row, total_cells_recived[num_cells_in_this_proc].pos_col, min_proc_positions);
@@ -1029,24 +756,7 @@ int main(int argc, char *argv[])
 #if !defined(CP_TABLON)
 		timeCellSyncL = MPI_Wtime();
 #endif
-		/*			printf("ITER: %d rank %d to sned %d stay %d\n",iter,rank,to_send,num_cells_in_this_proc);
-
-		for (i = 0; i < num_cells; i++)
-		{
-			printf("\tITER: %d RANK: %d, Cell %d, Pos(%f,%f)=%d, Mov(%f,%f), Choose_mov(%f,%f,%f), Storage: %f, Age: %d\n",
-				   iter, rank, i,
-				   cells[i].pos_row,
-				   cells[i].pos_col,
-				   ((int)cells[i].pos_row * columns) + (int)cells[i].pos_col,
-				   cells[i].mov_row,
-				   cells[i].mov_col,
-				   cells[i].choose_mov[0],
-				   cells[i].choose_mov[1],
-				   cells[i].choose_mov[2],
-				   cells[i].storage,
-				   cells[i].age);
-		}
-*/
+		
 		//Calculate arrays cnts and displacements.
 
 		displs[0] = 0;
@@ -1054,19 +764,7 @@ int main(int argc, char *argv[])
 		{
 			displs[i] = cells_to_exchange[i - 1] + displs[i - 1];
 		}
-		//We dont need to send to ourselfs
-		//	sndcnts[rank] = 0;
-		//	displs[rank] = 0;
-
-		/*
-		for(i = 0; i < nprocs; i++){
-			printf("ITER: %d %d to: %d cnt: %d dis: %d\n",iter,rank, i,cells_to_exchange[i],displs[i]);
-		}
-		for(i = 0; i < nprocs; i++){
-			printf("ITER: %d %d from row %d to %d\n",iter,rank, min_proc_positions, max_proc_positions[rank]);
-		}
-		*/
-
+		
 		//Iterate all the processes so everyone can tell the others the number of cells to recieve.
 		int num_cells_to_recive[nprocs], total_recived = 0;
 
@@ -1076,7 +774,6 @@ int main(int argc, char *argv[])
 			total_recived += num_cells_to_recive[i];
 		}
 
-		//	printf("Iter: %d rank: %d reviced %d\n", iter,rank,total_recived);
 		//Asign memory to recieve all the cells
 		if (total_recived > 0)
 		{
@@ -1101,23 +798,7 @@ int main(int argc, char *argv[])
 		free(cells);
 		cells = total_cells_recived;
 		num_cells = total_recived + num_cells_in_this_proc;
-		/*
-for (i = 0; i < num_cells; i++)
-		{
-
-			printf("\t%d RECIVED: %d, Cell %d, Pos(%f,%f)=%d, Mov(%f,%f), Choose_mov(%f,%f,%f), Storage: %f, Age: %d\n",
-				   iter, rank, i,
-				   cells[i].pos_row,
-				   cells[i].pos_col,
-				   ((int)cells[i].pos_row * columns) + (int)cells[i].pos_col,
-				   cells[i].mov_row,
-				   cells[i].mov_col,
-				   cells[i].choose_mov[0],
-				   cells[i].choose_mov[1],
-				   cells[i].choose_mov[2],
-				   cells[i].storage,
-				   cells[i].age);
-		}*/
+	
 		for (j = num_cells_in_this_proc; j < total_recived + num_cells_in_this_proc; j++)
 		{
 			/* 4.3.4. Annotate that there is one more cell in this culture position */
@@ -1152,7 +833,6 @@ for (i = 0; i < num_cells; i++)
 			short count = accessMatWithSub(culture_cells, cells[i].pos_row, cells[i].pos_col, min_proc_positions);
 			float my_food = food / count;
 			cells[i].storage += my_food;
-			//printf("RANK: %d ITER: %d Cell: %d my_foo %lf = %lf / %d\n",rank,iter, i, my_food,food,count);
 			/* 4.4.2. Split cell if the conditions are met: Enough maturity and energy */
 			if (cells[i].age > 30 && cells[i].storage > 20)
 			{
@@ -1180,8 +860,7 @@ for (i = 0; i < num_cells; i++)
 				cell_mutation(&cells[i]);
 				cell_mutation(&new_cells[step_new_cells - 1]);
 			}
-			//if (accessMatWithSub(culture, cells[i].pos_row, cells[i].pos_col, min_proc_positions) != 0)
-			//	accessMatWithSub(culture, cells[i].pos_row, cells[i].pos_col, min_proc_positions) = 0;
+
 		} // End cell actions
 		free(food_to_share);
 #if !defined(CP_TABLON)
@@ -1215,7 +894,6 @@ for (i = 0; i < num_cells; i++)
 #if !defined(CP_TABLON)
 		timeDecreaseFoodL = MPI_Wtime();
 #endif
-		//printf("iter %d rank %d self %d num_cells %d\n",iter, rank,self_positions, num_cells);
 
 		current_max_food = 0.0f;
 		for (i = 0; i < self_positions; i++)
@@ -1228,13 +906,11 @@ for (i = 0; i < num_cells; i++)
 				culture[i] = 0.0f;
 			}
 			// Reduce 5%
-			//printf("%d culture %lf in %d (%d) %d\n", rank, culture[i], i, i + min_proc_positions, j);
 			else if (culture[i] > current_max_food)
 			{
 				current_max_food = culture[i];
 			}
 		}
-		//memset(culture_cells,0, sizeof(*culture_cells)*self_positions);
 
 #if !defined(CP_TABLON)
 		timeDecreaseFoodL = MPI_Wtime() - timeDecreaseFoodL;
@@ -1254,8 +930,6 @@ for (i = 0; i < num_cells; i++)
 		{
 			any_cell_alive = false;
 		}
-		//printf("rank %d %d, num_cells %d\n", rank, iter, aux);
-		//now_alive = aux;
 		// Statistics: Max alive cells per step
 		if (aux > sim_stat.history_max_alive_cells)
 			sim_stat.history_max_alive_cells = aux;
