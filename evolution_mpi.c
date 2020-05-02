@@ -374,10 +374,6 @@ int main(int argc, char *argv[])
  *
  */
 
-	//TODO: Balance the number of cells in each processor
-	//TODO: Split culture and culture cells
-	//TODO: Make proccessor 0 the manager of food number generation and statistics collection (corner case: only one proccessor)
-
 #if !defined(CP_TABLON)	  //Precompilaciñon para evitar medir tiempos en el momento de la prueba en el servidor http://frontendv.infor.uva.es/faq#6 \
 						  // 2.1 Time variables for single loop iterations
 	double timeInitCS;	  // 3.1 Initialize culture surface
