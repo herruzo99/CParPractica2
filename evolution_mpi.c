@@ -581,7 +581,6 @@ int main(int argc, char *argv[])
 	int displs[nprocs];
 	for (iter = 0; iter < max_iter && current_max_food <= max_food && any_cell_alive; iter++)
 	{
-		//			printf("##########rank %d iter %d\n", rank, iter);
 		int step_new_cells = 0;
 		int step_dead_cells = 0;
 
